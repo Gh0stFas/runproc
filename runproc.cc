@@ -342,7 +342,7 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
 }
 //}}}
 
-void sigint_handler(int signum){
+void sigint_ignore(int signum){
   printf("Caught CTRL-C\n");
 }
 
@@ -395,8 +395,21 @@ int main(int argc, char **argv){
   printf("Log prefix: %s\n",opts.log_prefix);
   printf("Log bytes: %lu\n",opts.num_bytes);
 
-  // Setup a signal handler
-  signal(SIGINT,sigint_handler);
+  // Setup a signal to ignore SIGINT. the reason for this
+  // is that if you allow this process to die on SIGINT then
+  // you don't get the child processes time to react to SIGINT
+  // as well and clean up if possible. Doing it this way causes
+  // the SIGINT to be passed on through to the child processes,
+  // or process group, allowing them to return as intended and
+  // allows this process to pick up any last messages.
+  //
+  // NOTE: In order to replicate a CTRL+c with the kill command
+  // you must send the SIGINT to the entire process group. You
+  // can do this by turning the process ID of runproc to a
+  // negative. For instance, if the process ID of runproc was
+  // 20405 then you could send SIGINT properly to the process
+  // group with kill like this:  kill -INT -20405.
+  signal(SIGINT,sigint_ignore);
 
   run(opts.cmd,
       opts.log_dir,
