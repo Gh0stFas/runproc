@@ -1,0 +1,6 @@
+cudatest
+cudaquery
+*~
+*swp
+*.a
+*.o
