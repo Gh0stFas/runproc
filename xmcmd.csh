@@ -1,9 +1,17 @@
 #!/bin/tcsh
 
-# Start X-MIDAS
+# Instruct the shell to ignore interrupts. This allows the python module
+# to catch interrupts properly, returning to the shell allowing it to
+# drop X-MIDAS properly with xmend.
+onintr -
+
+# Start xm
 source $XMDISK/xm/unix/xmstart
 
-xm python /home/jsegars/git/runproc/testpy.py
+# The -u instructs python to setup stdout, stderr and stdin as completely
+# unbuffured. This allows for quick updates to the log file produced by
+# runproc.
+xm python -u testpy.py
 
-# Stop X-MIDAS
+# Stop xm
 source $XMDISK/xm/unix/xmend
