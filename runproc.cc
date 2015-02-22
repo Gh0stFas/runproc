@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <sys/time.h>
 #include <errno.h>
 #include "popen2.h"
 
@@ -183,11 +184,15 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
   char log_fname_arch[PATH_MAX];
   char cmd_r[MAX_CMD_LEN];
   char line_tstamp[30];
+  char log_dt[30];
+  char log_usec[30];
+  char log_tstamp[40];
   char log_date[9];
   char chk_date[9];
   char log_time[7];
   char arch_date[9];
   char arch_time[7];
+  struct timeval log_msg_tval;
   char log_pre[PATH_MAX];
   time_t tval = time(NULL);
   int nread,nwrite,nwrit,nwritten;
@@ -261,9 +266,18 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
 
         //////////////// Write ////////////////////
         // Write out a timestamp first
-        tval = time(NULL);
-        strftime(line_tstamp,30,"%Y-%m-%d::%H:%M:%S  ||  ",localtime(&tval));
-        fwrite(line_tstamp,sizeof(char),strlen(line_tstamp),logf);
+        // NOTE: Old method of log timestamping with only second precision
+        //tval = time(NULL);
+        //strftime(line_tstamp,30,"%Y-%m-%d::%H:%M:%S  ||  ",localtime(&tval));
+        //fwrite(line_tstamp,sizeof(char),strlen(line_tstamp),logf);
+
+        // NOTE: New timestamping method with microsecond precision
+        gettimeofday(&log_msg_tval,NULL);
+        strftime(log_dt,30,"%Y-%m-%d::%H:%M:%S",localtime(&(log_msg_tval.tv_sec)));
+        sprintf(log_usec,"%.6f",(log_msg_tval.tv_usec/1e6));
+        // Skip past the leading 0 in the microsecond portion
+        sprintf(log_tstamp,"%s%s  ||  ",log_dt,&(log_usec[1]));
+        fwrite(log_tstamp,sizeof(char),strlen(log_tstamp),logf);
 
         // Loop to write the data
         nwritten=0;
