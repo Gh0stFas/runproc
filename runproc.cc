@@ -26,6 +26,7 @@
 //{{{ command line parsing
 typedef struct {
   int verbose;
+  int no_archive;
   char cmd[MAX_CMD_LEN];
   char log_prefix[PATH_MAX];
   char log_dir[PATH_MAX];
@@ -48,11 +49,13 @@ void print_usage(){
   printf("\n\t-d, --dir=STRING\n");
   printf("\t\tLog directory. (Default: CWD)\n");
   printf("\n\t-a, --arch-dir=STRING\n");
-  printf("\t\tLog archive directory. (Default: CWD/arch)\n");
+  printf("\t\tLog archive directory. (Default: <Log directory>/arch)\n");
+  printf("\n\t-n, --no-arch\n");
+  printf("\t\tTurn off the archiving of the log file.\n\n\t\tWarning: If the log file exceeds the number of bytes per log within the same 24 hour\n\t\tperiod then the current log file will be overwritten with the new one.\n");
   printf("\n\t-b, --bytes=NBYTES\n");
   printf("\t\tNumber of bytes per log file. (Default: %d)\n",DEFAULT_NBYTES);
   printf("\n\t-i, --instance=NUMBER\n");
-  printf("\t\tProcess number to distinguish like processes. (Default: 1)\n");
+  printf("\t\tProcess number to distinguish log files of like processes. (Default: 1)\n");
   return;
 }
 
@@ -71,11 +74,13 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
       {"bytes", required_argument, 0,'b'},
       {"dir", required_argument, 0,'d'},
       {"arch-dir", required_argument, 0,'a'},
+      {"no-arch", no_argument, 0,'n'},
       {0,0,0,0}
   };
 
   // Default values
   op->verbose=0;
+  op->no_archive=0;
   op->instance=1;
   op->num_bytes=DEFAULT_NBYTES;
   op->cmd[0]='\0';
@@ -84,7 +89,7 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
   op->log_arch_dir[0]='\0';
 
   int long_index =0;
-  while ((opt = getopt_long(argc, argv,"hv::c:l:i:b:d:a:", long_options, &long_index )) != -1) {
+  while ((opt = getopt_long(argc, argv,"nhv::c:l:i:b:d:a:", long_options, &long_index )) != -1) {
     if(opt == 'v'){
       op->verbose = 1;
     }
@@ -104,6 +109,9 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
       print_usage();
       rtn=-1;
       break;
+    }
+    else if(opt == 'n'){
+      op->no_archive=1;
     }
     else if(opt == 'i'){
       char *eptr=NULL;
@@ -166,7 +174,7 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
 //}}}
 
 //{{{ run
-int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int instance, unsigned long rollover_size){
+int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int instance, unsigned long rollover_size, int no_archive){
   //char stdval[129];
   char stdval[MAX_INPUT];
   char *stdval_r;
@@ -178,6 +186,8 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
   char log_date[9];
   char chk_date[9];
   char log_time[7];
+  char arch_date[9];
+  char arch_time[7];
   char log_pre[PATH_MAX];
   time_t tval = time(NULL);
   int nread,nwrite,nwrit,nwritten;
@@ -194,7 +204,7 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
     printf("...exiting\n");
     return 1;
   }
-  if(strlen(log_arch_dir) == 0){
+  if(strlen(log_arch_dir) == 0 && !(no_archive)){
     printf("No log archive directory provided.\n");
     printf("...exiting\n");
     return 1;
@@ -292,13 +302,19 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
           fclose(logf);
 
           // Archive the old file
-          archive_number++;
-          sprintf(log_fname_arch,"%s/%s.arch%d",log_arch_dir,log_base,archive_number);
-          printf("Archive name: %s\n",log_fname_arch);
-          status = rename(log_fname,log_fname_arch);
-          if(status != 0){
-            printf("Failed to move log file to the archive.\n");
-            perror("rename: ");
+          if(!no_archive){
+            archive_number++;
+
+            strftime(arch_date,9,"%Y%m%d",localtime(&tval));
+            strftime(arch_time,7,"%H%M%S",localtime(&tval));
+
+            sprintf(log_fname_arch,"%s/%s.arch%d_%s_%s",log_arch_dir,log_base,archive_number,arch_date,arch_time);
+            printf("Archive name: %s\n",log_fname_arch);
+            status = rename(log_fname,log_fname_arch);
+            if(status != 0){
+              printf("Failed to move log file to the archive.\n");
+              perror("rename: ");
+            }
           }
 
           // Setup everything for the new log file
@@ -378,20 +394,22 @@ int main(int argc, char **argv){
     sprintf(opts.log_arch_dir,"%s/arch",opts.log_dir);
   }
 
-  // Make sure the directory exists and if not attempt to create it
-  status = mkdir(opts.log_arch_dir,S_IRWXU|S_IRGRP|S_IWGRP|S_IROTH);
-  // Couldn't create the directory
-  if(status == -1){
-    // Why?
-    if(errno != EEXIST){
-      perror("mkdir: ");
-      return 1;
+  if(!(opts.no_archive)){
+    // Make sure the directory exists and if not attempt to create it
+    status = mkdir(opts.log_arch_dir,S_IRWXU|S_IRGRP|S_IWGRP|S_IROTH);
+    // Couldn't create the directory
+    if(status == -1){
+      // Why?
+      if(errno != EEXIST){
+        perror("mkdir: ");
+        return 1;
+      }
     }
   }
 
   printf("Running: %s\n",opts.cmd);
   printf("Log dir: %s\n",opts.log_dir);
-  printf("Log archive dir: %s\n",opts.log_arch_dir);
+  printf("Log archive dir: %s\n",(opts.no_archive ? "Turned OFF":opts.log_arch_dir));
   printf("Log prefix: %s\n",opts.log_prefix);
   printf("Log bytes: %lu\n",opts.num_bytes);
 
@@ -416,7 +434,8 @@ int main(int argc, char **argv){
       opts.log_prefix,
       opts.log_arch_dir,
       opts.instance,
-      opts.num_bytes);
+      opts.num_bytes,
+      opts.no_archive);
 
   return 0;
 }
