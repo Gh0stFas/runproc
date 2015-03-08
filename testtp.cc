@@ -19,6 +19,7 @@ int main(int argc, char **argv){
 
   for(unsigned int i=0;i<nlines;i++){
     printf("The quick brown frox jumped over the lazy dog.\n");
+    //printf("The quick brown frox jumped over the lazy dog.");
   }
 
   return 0;

@@ -177,7 +177,7 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
 //{{{ run
 int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int instance, unsigned long rollover_size, int no_archive){
   //char stdval[129];
-  char stdval[MAX_INPUT];
+  char stdval[MAX_INPUT+1];
   char *stdval_r;
   char log_fname[PATH_MAX];
   char log_base[PATH_MAX];
@@ -254,6 +254,16 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
         stdval_r = fgets(stdval,MAX_INPUT,stdoe);
         if(stdval_r != NULL){
           nread=strlen(stdval_r);
+
+          // If the last character was not a newline then we
+          // need to add one so that the messages line up properly.
+          if(stdval_r[nread-1] != '\n'){
+            stdval_r[nread] = '\n';
+            stdval_r[nread+1] = '\0';
+
+            // Grab the new size
+            nread=strlen(stdval_r);
+          }
         }
         else {
           // If the NULL is due to end-of-file then go ahead and push us to
