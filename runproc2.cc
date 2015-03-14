@@ -52,6 +52,14 @@ void print_usage(){
   printf("runproc [OPTION] ...\n");
   printf("\n\033[1mDESCRIPTION\033[0m\n");
   printf("\tRuns a given process and writes standard out/error to log files.\n");
+  printf("\n\tThe log file is created in such a way that it makes tail'ing it through roll-overs\n");
+  printf("\tfeasible. The log file is created in the specified directory (local if unspecified) as\n");
+  printf("\t<log-prefix>_<instance>.log. The file will be rolled over to an archive file named\n");
+  printf("\t<log-prefix>_<instance>.log.arch<number>_<date>_<time> where <date> and <time> are the\n");
+  printf("\tdate and time which the log file was initially created. Tail'ing the initial log file\n");
+  printf("\twith 'tail --retry --follow=name <log-prefix>_<instance>.log' will allow tail to follow\n");
+  printf("\tthe log file when it rolls.\n");
+  printf("\n\tNOTE: The log file will roll every 24 hours or until -b <bytes>, whichever comes first.\n");
   printf("\n\033[1mOPTION\033[0m\n");
   printf("\n\t-c, --command=STRING\n");
   printf("\t\tQuoted command string. (Required)\n");
@@ -186,6 +194,7 @@ int parse_opts(int argc, char **argv, OPTIONS_T *op){
 }
 //}}}
 
+//{{{ rw_thread
 void *rw_thread(void *arg){
   char stdval[MAX_INPUT+1];
   char *stdval_r;
@@ -285,6 +294,7 @@ void *rw_thread(void *arg){
   // Exit nicely
   pthread_exit((void *)0);
 }
+//}}}
 
 //{{{ run
 int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int instance, unsigned long rollover_size, int no_archive){
@@ -336,10 +346,13 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
   strcpy(log_pre,log_prefix);
   if(log_pre[strlen(log_pre)-1] == '_') log_pre[strlen(log_pre)-1] = '\0';
 
+  // Record the date/time the log file was started so it can be used
+  // when archiving.
   strftime(log_date,9,"%Y%m%d",localtime(&tval));
   strftime(log_time,7,"%H%M%S",localtime(&tval));
   sprintf(log_marker,"\n\n######################### Start of log (time=%s) #########################\n\n",log_time);
-  sprintf(log_base,"%s_%s_%d.log",log_pre,log_date,instance);
+  //sprintf(log_base,"%s_%s_%d.log",log_pre,log_date,instance);
+  sprintf(log_base,"%s_%d.log",log_pre,instance);
   sprintf(log_fname,"%s/%s",log_dir,log_base);
 
   printf("Log name: %s\n",log_fname);
@@ -393,7 +406,8 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
             strftime(arch_date,9,"%Y%m%d",localtime(&tval));
             strftime(arch_time,7,"%H%M%S",localtime(&tval));
 
-            sprintf(log_fname_arch,"%s/%s.arch%d_%s_%s",log_arch_dir,log_base,archive_number,arch_date,arch_time);
+            //sprintf(log_fname_arch,"%s/%s.arch%d_%s_%s",log_arch_dir,log_base,archive_number,arch_date,arch_time);
+            sprintf(log_fname_arch,"%s/%s.arch%d_%s_%s",log_arch_dir,log_base,archive_number,log_date,log_time);
             printf("Archive name: %s\n",log_fname_arch);
             status = rename(log_fname,log_fname_arch);
             if(status != 0){
@@ -403,10 +417,13 @@ int run(char *cmd, char *log_dir, char *log_prefix, char *log_arch_dir,  int ins
           }
 
           // Setup everything for the new log file
+          // Record the date/time the log file was started so it can be used
+          // when archiving.
           strftime(log_date,9,"%Y%m%d",localtime(&tval));
           strftime(log_time,7,"%H%M%S",localtime(&tval));
           sprintf(log_marker,"\n\n######################### Start of log (time=%s) #########################\n\n",log_time);
-          sprintf(log_base,"%s_%s_%d.log",log_pre,log_date,instance);
+          //sprintf(log_base,"%s_%s_%d.log",log_pre,log_date,instance);
+          sprintf(log_base,"%s_%d.log",log_pre,instance);
           sprintf(log_fname,"%s/%s",log_dir,log_base);
 
           printf("Log name: %s\n",log_fname);
@@ -487,7 +504,8 @@ int main(int argc, char **argv){
   }
 
   if(strlen(opts.log_arch_dir) == 0){
-    sprintf(opts.log_arch_dir,"%s/arch",opts.log_dir);
+    //sprintf(opts.log_arch_dir,"%s/arch",opts.log_dir);
+    strcpy(opts.log_arch_dir,opts.log_dir);
   }
 
   if(!(opts.no_archive)){
